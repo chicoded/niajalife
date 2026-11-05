@@ -371,32 +371,99 @@ export const INTERACTION_RADIUS = 6;
 /** Collision radius of a player capsule, in metres. */
 export const PLAYER_RADIUS = 0.7;
 
+/** How far past a surface a collision pushes, so rounding cannot re-clip it. */
+const SURFACE_EPSILON = 0.01;
+
 /**
- * Pushes a position out of any building footprint it has entered.
+ * Collision half-extents of each prop kind, in metres.
+ *
+ * Only the parts a walking player can actually bump into are counted: a
+ * streetlight's lamp and a tree's canopy sit above head height, so the pole and
+ * the trunk are used instead. Props are axis-aligned (their `rotY` is a whole
+ * turn or half a turn), so a plain footprint is exact here.
+ */
+export const PROP_FOOTPRINT: Record<PropDef["kind"], { halfW: number; halfD: number }> = {
+  streetlight: { halfW: 0.35, halfD: 0.35 },
+  tree: { halfW: 0.55, halfD: 0.55 },
+  danfo: { halfW: 2.4, halfD: 1.05 },
+  stall: { halfW: 1.2, halfD: 0.75 },
+  sign: { halfW: 0.3, halfD: 0.3 },
+};
+
+/**
+ * Pushes a position out of any box footprint it has entered.
  *
  * Shared by the authoritative server simulation and the client's local
  * prediction, so the two can never disagree about where a wall is.
  */
-export function resolveBuildingCollisions(
-  buildings: Building[],
+function pushOutOfBoxes(
+  boxes: { x: number; z: number; halfW: number; halfD: number }[],
   x: number,
   z: number,
-  radius = PLAYER_RADIUS,
+  radius: number,
 ): { x: number; z: number } {
-  for (const b of buildings) {
-    const halfW = b.w / 2 + radius;
-    const halfD = b.d / 2 + radius;
+  for (const b of boxes) {
+    const halfW = b.halfW + radius;
+    const halfD = b.halfD + radius;
     const dx = x - b.x;
     const dz = z - b.z;
     if (Math.abs(dx) >= halfW || Math.abs(dz) >= halfD) continue;
 
     const pushX = halfW - Math.abs(dx);
     const pushZ = halfD - Math.abs(dz);
+    // Land just past the surface: resting exactly on the boundary lets floating
+    // point rounding leave the character a hair inside, which reads as jitter.
     if (pushX < pushZ) {
-      x = b.x + Math.sign(dx || 1) * halfW;
+      x = b.x + Math.sign(dx || 1) * (halfW + SURFACE_EPSILON);
     } else {
-      z = b.z + Math.sign(dz || 1) * halfD;
+      z = b.z + Math.sign(dz || 1) * (halfD + SURFACE_EPSILON);
     }
   }
   return { x, z };
+}
+
+export function resolveBuildingCollisions(
+  buildings: Building[],
+  x: number,
+  z: number,
+  radius = PLAYER_RADIUS,
+): { x: number; z: number } {
+  return pushOutOfBoxes(
+    buildings.map((b) => ({ x: b.x, z: b.z, halfW: b.w / 2, halfD: b.d / 2 })),
+    x,
+    z,
+    radius,
+  );
+}
+
+/** Pushes a position out of any street prop it has entered. */
+export function resolvePropCollisions(
+  props: PropDef[],
+  x: number,
+  z: number,
+  radius = PLAYER_RADIUS,
+): { x: number; z: number } {
+  return pushOutOfBoxes(
+    props.map((p) => ({ x: p.x, z: p.z, ...PROP_FOOTPRINT[p.kind] })),
+    x,
+    z,
+    radius,
+  );
+}
+
+/**
+ * The single collision pass shared by the server simulation and the client's
+ * local prediction: buildings first, then street props.
+ *
+ * Both callers must use this one function — that is what stops the client and
+ * the server from ever disagreeing about what is solid.
+ */
+export function resolveWorldCollisions(
+  layout: DistrictLayout,
+  x: number,
+  z: number,
+  radius = PLAYER_RADIUS,
+): { x: number; z: number } {
+  const afterBuildings = resolveBuildingCollisions(layout.buildings, x, z, radius);
+  return resolvePropCollisions(layout.props, afterBuildings.x, afterBuildings.z, radius);
 }

@@ -30,6 +30,10 @@ export function createNameTag(
 ): NameTagHandle {
   const box = new Rectangle(`tag-${anchor.name}`);
   box.height = "28px";
+  // Without this the rectangle stretches to the whole fullscreen layer instead
+  // of hugging the label. `adaptWidthToChildren` sizes it to the text block
+  // (which itself is `resizeToFit`), so the tag is exactly as wide as its name.
+  box.adaptWidthToChildren = true;
   box.cornerRadius = 9;
   box.thickness = 1.2;
   box.color = isLocal ? "#f7c948" : "#8fd0ff55";

@@ -63,8 +63,6 @@ interface PlayerStateLike {
 }
 
 interface PlayersMapLike {
-  onAdd(cb: (player: PlayerStateLike, key: string) => void): void;
-  onRemove(cb: (player: PlayerStateLike, key: string) => void): void;
   forEach(cb: (player: PlayerStateLike, key: string) => void): void;
   get(key: string): PlayerStateLike | undefined;
   size: number;
@@ -89,6 +87,14 @@ export class GameClient {
   private seq = 0;
   private intentionalLeave = false;
   private reconnecting = false;
+  /**
+   * Set once this instance has been torn down. A `connect()` that is still
+   * awaiting its handshake must notice this and close the room it gets back,
+   * otherwise the server keeps a hidden session alive forever — which is how
+   * phantom "players online" pile up.
+   */
+  private closed = false;
+  /** How many times we try to resume a dropped session before rejoining fresh. */
   private readonly maxReconnectAttempts = 5;
 
   constructor(endpoint: string) {
@@ -108,7 +114,7 @@ export class GameClient {
   }
 
   get playerCount(): number {
-    return this.state()?.players.size ?? 0;
+    return this.players()?.size ?? 0;
   }
 
   get connected(): boolean {
@@ -116,6 +122,7 @@ export class GameClient {
   }
 
   async connect(appearance: CharacterAppearance): Promise<void> {
+    if (this.closed) return;
     this.appearance = appearance;
     this.intentionalLeave = false;
     this.emitStatus("connecting");
@@ -124,6 +131,12 @@ export class GameClient {
         districtId: "yaba",
         appearance,
       });
+      // The screen may have been torn down while the handshake was in flight.
+      // Close the room instead of leaving an invisible session on the server.
+      if (this.closed) {
+        room.leave(true);
+        return;
+      }
       this.bindRoom(room);
       this.emitStatus("connected");
     } catch (error) {
@@ -134,6 +147,7 @@ export class GameClient {
 
   leave(): void {
     this.intentionalLeave = true;
+    this.closed = true;
     this.room?.leave(true);
     this.room = null;
     this.emitStatus("disconnected");
@@ -159,7 +173,7 @@ export class GameClient {
   localSnapshot(): PlayerSnapshot | null {
     const id = this.sessionId;
     if (!id) return null;
-    const player = this.state()?.players.get(id);
+    const player = this.players()?.get(id);
     return player ? toSnapshot(player) : null;
   }
 
@@ -168,12 +182,26 @@ export class GameClient {
    * the render loop free of per-frame garbage.
    */
   forEachPlayer(callback: (player: PlayerSnapshot) => void): void {
-    this.state()?.players.forEach((player) => callback(toSnapshot(player)));
+    this.players()?.forEach((player) => callback(toSnapshot(player)));
   }
 
   private state(): DistrictStateLike | null {
     if (!this.room) return null;
     return this.room.state as unknown as DistrictStateLike;
+  }
+
+  /**
+   * The replicated player map, but only once it is genuinely usable.
+   *
+   * Colyseus knows the state's field *names* as soon as the handshake lands,
+   * yet their values remain `undefined` until the first state message has been
+   * applied. Touching `state.players` before then throws
+   * "Cannot read properties of undefined (reading 'onAdd')", so every accessor
+   * goes through this guard instead.
+   */
+  private players(): PlayersMapLike | null {
+    const players = this.state()?.players;
+    return players && typeof players.forEach === "function" ? players : null;
   }
 
   private bindRoom(room: Room): void {
@@ -190,9 +218,8 @@ export class GameClient {
       this.handlers.onBuilding?.(event);
     });
 
-    const state = room.state as unknown as DistrictStateLike | undefined;
-    state?.players.onAdd(() => this.emitRoster());
-    state?.players.onRemove(() => this.emitRoster());
+    // A patch arrives every tick, and joining or leaving changes the map, so
+    // this keeps the roster current without any per-collection callbacks.
     room.onStateChange(() => this.emitRoster());
 
     room.onError((code, message) => {
@@ -229,13 +256,17 @@ export class GameClient {
 
     // The reconnection window expired. Re-enter the city as a fresh session so
     // the player is never stranded on a dead screen.
-    if (!this.intentionalLeave && this.appearance) {
+    if (!this.intentionalLeave && !this.closed && this.appearance) {
       try {
         const room = await this.client.joinOrCreate(ROOM_NAME, {
           districtId: "yaba",
           appearance: this.appearance,
         });
         this.reconnecting = false;
+        if (this.closed) {
+          room.leave(true);
+          return;
+        }
         this.bindRoom(room);
         this.emitStatus("connected", "Rejoined the city with a new session.");
         return;
@@ -276,11 +307,11 @@ export class GameClient {
   }
 
   private emitRoster(): void {
-    const state = this.state();
-    if (!state) return;
-    const players: PlayerSnapshot[] = [];
-    state.players.forEach((player) => players.push(toSnapshot(player)));
-    this.handlers.onRoster?.(players);
+    const map = this.players();
+    if (!map) return;
+    const roster: PlayerSnapshot[] = [];
+    map.forEach((player) => roster.push(toSnapshot(player)));
+    this.handlers.onRoster?.(roster);
   }
 }
 

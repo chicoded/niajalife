@@ -170,7 +170,13 @@ export function GamePage({ account, appearance, onExit, onAppearanceChange }: Ga
       // The client already reported the failure through `onStatus`.
     });
 
+    // A refresh or a closed tab never runs the React cleanup, so tell the
+    // server we are leaving instead of holding the character for 15 seconds.
+    const handlePageHide = () => client.leave();
+    window.addEventListener("pagehide", handlePageHide);
+
     return () => {
+      window.removeEventListener("pagehide", handlePageHide);
       client.leave();
       scene.dispose();
       clientRef.current = null;

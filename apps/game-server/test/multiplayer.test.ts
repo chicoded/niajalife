@@ -8,7 +8,14 @@
  * Run with:  npm --workspace @naijaverse/game-server run test
  */
 import { Client, type Room } from "colyseus.js";
-import { DEFAULT_APPEARANCE, MOVEMENT, ROOM_NAME } from "@naijaverse/shared";
+import {
+  DEFAULT_APPEARANCE,
+  MOVEMENT,
+  PLAYER_RADIUS,
+  PROP_FOOTPRINT,
+  ROOM_NAME,
+  getDistrictLayout,
+} from "@naijaverse/shared";
 import { createGameServer } from "../src/server";
 
 const PORT = 2757;
@@ -157,6 +164,36 @@ async function main() {
   roomA.leave();
   const shrunk = await waitFor(() => players(roomB).size === 1, 2500);
   check("leaving removes the character from the shared world", shrunk, `B sees ${players(roomB).size}`);
+
+  // 7. Street props are solid: walking across the district must never place a
+  //    character inside a tree, streetlight, stall, sign or parked danfo.
+  const props = getDistrictLayout("yaba").props;
+  const insideProp = (x: number, z: number): boolean =>
+    props.some((p) => {
+      const fp = PROP_FOOTPRINT[p.kind];
+      return (
+        Math.abs(x - p.x) < fp.halfW + PLAYER_RADIUS &&
+        Math.abs(z - p.z) < fp.halfD + PLAYER_RADIUS
+      );
+    });
+
+  const walker = holdInput(roomB, 0.949, -0.316);
+  let breach: string | null = null;
+  const walkDeadline = Date.now() + 6000;
+  while (Date.now() < walkDeadline) {
+    const me = view(roomB, roomB.sessionId);
+    if (me && insideProp(me.x, me.z)) {
+      breach = `${me.x.toFixed(2)},${me.z.toFixed(2)}`;
+      break;
+    }
+    await sleep(30);
+  }
+  await walker.release();
+  check(
+    "street props are solid (no walking through trees, stalls or danfos)",
+    breach === null,
+    breach ? `character passed inside a prop at ${breach}` : "stayed clear of every prop",
+  );
 
   await roomB.leave();
   await handle.shutdown();

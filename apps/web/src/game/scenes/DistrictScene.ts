@@ -16,7 +16,7 @@ import {
   PLAYER_RADIUS,
   WORLD,
   getDistrictLayout,
-  resolveBuildingCollisions,
+  resolveWorldCollisions,
   type AppearanceUpdate,
   type CharacterAppearance,
 } from "@naijaverse/shared";
@@ -252,7 +252,7 @@ export class DistrictScene {
       const speed = MOVEMENT.speed * (sprint ? MOVEMENT.sprintMultiplier : 1);
       const nextX = clamp(this.localX + dirX * speed * dt, -WORLD.bounds, WORLD.bounds);
       const nextZ = clamp(this.localZ + dirZ * speed * dt, -WORLD.bounds, WORLD.bounds);
-      const resolved = resolveBuildingCollisions(this.layout.buildings, nextX, nextZ, PLAYER_RADIUS);
+      const resolved = resolveWorldCollisions(this.layout, nextX, nextZ, PLAYER_RADIUS);
       this.localX = resolved.x;
       this.localZ = resolved.z;
       this.localRotY = approachAngle(this.localRotY, Math.atan2(dirX, dirZ), dt * 12);

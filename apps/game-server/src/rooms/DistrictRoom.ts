@@ -11,7 +11,7 @@ import {
   distanceToBuilding,
   getDistrict,
   getDistrictLayout,
-  resolveBuildingCollisions,
+  resolveWorldCollisions,
   sanitizeAppearance,
   type AppearanceUpdate,
   type Building,
@@ -162,9 +162,9 @@ export class DistrictRoom extends Room<DistrictState> {
     });
   }
 
-  /** Pushes a position out of any building footprint it has entered. */
+  /** Pushes a position out of any building or street prop it has entered. */
   private resolveCollisions(x: number, z: number): { x: number; z: number } {
-    return resolveBuildingCollisions(this.layout.buildings, x, z, PLAYER_RADIUS);
+    return resolveWorldCollisions(this.layout, x, z, PLAYER_RADIUS);
   }
 
   private nextSpawn(): SpawnPoint {
@@ -173,11 +173,11 @@ export class DistrictRoom extends Room<DistrictState> {
     // Golden-angle spiral keeps arrivals from stacking on one another.
     const angle = n * 2.399963;
     const radius = n === 0 ? 0 : 2 + (n % 4) * 1.5;
-    return {
-      x: clamp(base.x + Math.cos(angle) * radius, -WORLD.bounds, WORLD.bounds),
-      z: clamp(base.z + Math.sin(angle) * radius, -WORLD.bounds, WORLD.bounds),
-      rotY: base.rotY,
-    };
+    const rawX = clamp(base.x + Math.cos(angle) * radius, -WORLD.bounds, WORLD.bounds);
+    const rawZ = clamp(base.z + Math.sin(angle) * radius, -WORLD.bounds, WORLD.bounds);
+    // Never drop an arrival inside a wall or a prop.
+    const safe = this.resolveCollisions(rawX, rawZ);
+    return { x: safe.x, z: safe.z, rotY: base.rotY };
   }
 
   // -------------------------------------------------------------------------
