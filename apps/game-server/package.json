@@ -1,0 +1,28 @@
+{
+  "name": "@naijaverse/game-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "NaijaVerse authoritative multiplayer game server (Colyseus).",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/index.js --external:colyseus --external:@colyseus/schema --external:dotenv --external:ws",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx test/multiplayer.test.ts"
+  },
+  "dependencies": {
+    "@colyseus/schema": "^3.0.0",
+    "@naijaverse/shared": "*",
+    "colyseus": "^0.16.0",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "colyseus.js": "^0.16.0",
+    "esbuild": "^0.24.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

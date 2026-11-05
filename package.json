@@ -1,0 +1,26 @@
+{
+  "name": "naijaverse",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NaijaVerse — a persistent multiplayer Nigerian life-simulation game. Milestone 01: the multiplayer vertical slice.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c green,cyan \"npm run dev:server\" \"npm run dev:web\"",
+    "dev:server": "npm --workspace @naijaverse/game-server run dev",
+    "dev:web": "npm --workspace @naijaverse/web run dev",
+    "build": "npm --workspace @naijaverse/game-server run build && npm --workspace @naijaverse/web run build",
+    "start": "npm --workspace @naijaverse/game-server run start",
+    "test": "npm --workspace @naijaverse/game-server run test",
+    "typecheck": "npm --workspaces --if-present run typecheck"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  }
+}

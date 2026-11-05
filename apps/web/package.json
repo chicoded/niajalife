@@ -1,0 +1,28 @@
+{
+  "name": "@naijaverse/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "NaijaVerse browser client — Babylon.js 3D world, React HUD, Colyseus networking.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@babylonjs/core": "^8.0.0",
+    "@babylonjs/gui": "^8.0.0",
+    "@naijaverse/shared": "*",
+    "colyseus.js": "^0.16.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7"
+  }
+}
